@@ -8,6 +8,7 @@ export const AppContextProvider=({children})=>{
 const navigate=useNavigate()
 const[user,setUser]=useState(null)
 const[token,setToken]=useState(localStorage.getItem('token')||'')
+const[student,setStudent]=useState(null)
 axios.defaults.baseURL=import.meta.env.VITE_SERVER_URL
 const loginAdmin = async (username, password) => {
   try {
@@ -41,7 +42,7 @@ const loginAdmin = async (username, password) => {
 
 
    
-    const value={user,setUser,navigate,loginAdmin}
+    const value={user,setUser,navigate,loginAdmin,student,setStudent}
     return(
         <Appcontext.Provider value={value}>
             {children}
