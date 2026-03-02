@@ -33,6 +33,7 @@ export const registerStudent = async (req, res) => {
     const token = jwt.sign(
       {
         id: student._id,
+        name:student.name,
         registerNo: student.registerNo, // 🔥 REQUIRED
         role: "student",
       },
@@ -84,6 +85,7 @@ export const loginStudent = async (req, res) => {
     const token = jwt.sign(
       {
         id: student._id,
+        name:student.name,
         registerNo: student.registerNo, // 🔥 REQUIRED
         role: "student",
       },

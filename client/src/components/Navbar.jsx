@@ -65,6 +65,19 @@ const Navbar = ({ onDataExtracted }) => {
       setLoading(false);
     }
   };
+  const handleLogout = () => {
+  // Remove admin token
+  localStorage.removeItem("adminToken");
+
+  // Clear extracted table data (optional)
+  if (onDataExtracted) {
+    onDataExtracted([]);
+  }
+
+  // Redirect to ADMIN LOGIN page
+  window.location.replace("/");
+};
+
 
   return (
     <>
@@ -119,7 +132,7 @@ const Navbar = ({ onDataExtracted }) => {
             </button>
           )}
 
-          <button className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-semibold transition">
+          <button onClick={handleLogout} className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-semibold transition">
             Logout
           </button>
         </div>

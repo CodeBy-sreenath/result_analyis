@@ -6,6 +6,7 @@ import adminRouter from './adminRoute.js'
 import router from './routes/resultRoutes.js'
 import studentRouter from './routes/studentRoute.js'
 import studResultRouter from './routes/studResultRoute.js'
+import complaintRouter from './routes/complaintRoute.js'
 const app=express()
 await connectDb()
 app.use(cors())
@@ -15,6 +16,7 @@ app.use('/api/admin',adminRouter)
 app.use('/api/results',router)
 app.use('/api/student',studentRouter)
 app.use('/api/studresult',studResultRouter)
+app.use('/api/complaint',complaintRouter)
 const PORT=process.env.PORT||3000
 app.listen(PORT,()=>{
     console.log(`server is running on ${PORT}`)

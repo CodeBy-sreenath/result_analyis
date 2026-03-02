@@ -11,6 +11,7 @@ import StudentLogin from "./components/Student/StudentLogin";
 import StudentHome from "./components/Student/StudentHome";
 import ComplaintPage from "./components/Student/ComplaintPage";
 import ViewResult from "./components/Student/ViewResult";
+import AdminComplaints from "./pages/AdminComplaint";
 
 const App = () => {
   const { user } = useAppContext();
@@ -43,6 +44,7 @@ const App = () => {
                 <Route path="/" element={<ResultTable data={tableData} />} />
                 <Route path="/previous-results" element={<PreviousResultsPage />} />
                 <Route path="*" element={<Navigate to="/" />} />
+                <Route path="/complaints" element={<AdminComplaints />} />
               </Routes>
             </>
           ) : (

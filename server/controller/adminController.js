@@ -36,6 +36,18 @@ export const adminLogin = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+export const adminLogout = async (req, res) => {
+  try {
+    // JWT is stateless → frontend removes token
+    return res.json({
+      success: true,
+      message: "Logout successful",
+    });
+  } catch (error) {
+    console.error("Logout error:", error.message);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
 
 // ----------------------
 // GET ADMIN DETAILS (/me)
