@@ -57,7 +57,7 @@ export const registerStudent = async (req, res) => {
 };
 
 /* =======================
-   LOGIN STUDENT
+   LOGIN Student
 ======================= */
 export const loginStudent = async (req, res) => {
   try {
