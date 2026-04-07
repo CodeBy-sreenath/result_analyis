@@ -2,10 +2,13 @@ import dotenv from "dotenv";
 import fetch from "node-fetch";
 
 dotenv.config();
-const API_KEY = process.env.GEMINI_API_KEY;
+
+const API_KEY = process.env.GROQ_API_KEY;
+const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+const MODEL = "llama-3.3-70b-versatile"; // fast + large context, great for extraction
 
 // ================================
-//  SAFE JSON PARSER (works 100%)
+//  SAFE JSON PARSER
 // ================================
 function safeJSONParse(text) {
   try {
@@ -13,7 +16,7 @@ function safeJSONParse(text) {
   } catch (e) {
     console.log("❌ JSON parse failed. Raw output:");
     console.log(text.substring(0, 300));
-    throw new Error("Gemini returned invalid JSON");
+    throw new Error("Groq returned invalid JSON");
   }
 }
 
@@ -21,33 +24,8 @@ function safeJSONParse(text) {
 //  MAIN FUNCTION - EXTRACT DATA FROM PDF TEXT
 // ==========================================
 export const extractDataFromPDFText = async (pdfText) => {
-  console.log("📡 Fetching available v1 models...");
+  console.log(`➡ Using Groq model: ${MODEL}`);
 
-  // Fetch ALL models
-  const modelList = await fetch(
-    `https://generativelanguage.googleapis.com/v1/models?key=${API_KEY}`
-  );
-  const modelJson = await modelList.json();
-
-  if (!modelJson.models) {
-    throw new Error("Unable to fetch model list");
-  }
-
-  // Choose fast, cheap model
-  const model =
-    modelJson.models.find((m) => m.name.includes("gemini-2.5-flash"))?.name ||
-    modelJson.models.find((m) => m.name.includes("flash"))?.name;
-
-  if (!model) {
-    throw new Error("No compatible Gemini v1 model found");
-  }
-
-  console.log("➡ Using model:", model);
-
-  // REST endpoint
-  const url = `https://generativelanguage.googleapis.com/v1/${model}:generateContent?key=${API_KEY}`;
-
-  // JSON output forced with delimiter trick
   const prompt = `
 You must extract KTU exam result data and return STRICT JSON ONLY.
 
@@ -95,29 +73,35 @@ RETURN ONLY:
 `;
 
   const body = {
-    contents: [
+    model: MODEL,
+    messages: [
       {
-        parts: [{ text: prompt }],
+        role: "user",
+        content: prompt,
       },
     ],
+    temperature: 0,        // deterministic output for structured data
+    max_tokens: 8192,
   };
 
-  console.log("📤 Sending request to Google AI...");
+  console.log("📤 Sending request to Groq API...");
 
-  const res = await fetch(url, {
+  const res = await fetch(GROQ_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${API_KEY}`,   // ← Groq uses Bearer token, not query param
+    },
     body: JSON.stringify(body),
   });
 
   const data = await res.json();
 
   if (data.error) {
-    throw new Error(data.error.message);
+    throw new Error(`Groq API error: ${data.error.message}`);
   }
 
-  const text =
-    data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const text = data.choices?.[0]?.message?.content || "";
 
   console.log("📥 Raw text received, length:", text.length);
 
@@ -125,13 +109,11 @@ RETURN ONLY:
   const match = text.match(/<json>([\s\S]*?)<\/json>/);
 
   if (!match) {
-    throw new Error("Gemini did not return JSON inside <json> tags");
+    throw new Error("Groq did not return JSON inside <json> tags");
   }
 
   const jsonString = match[1].trim();
-
   console.log("🔍 Extracted JSON size:", jsonString.length);
 
-  // Safe parse
   return safeJSONParse(jsonString);
 };
