@@ -21,6 +21,6 @@ const PORT=process.env.PORT||3000
 app.listen(PORT,()=>{
     console.log(`server is running on ${PORT}`)
 })
-console.log("GEMINI_API_KEY:", process.env.GEMINI_API_KEY);
+//console.log("GEMINI_API_KEY:", process.env.GEMINI_API_KEY);
 
 

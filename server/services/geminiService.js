@@ -1,137 +1,120 @@
+import Groq from "groq-sdk";
 import dotenv from "dotenv";
-import fetch from "node-fetch";
 
 dotenv.config();
-const API_KEY = process.env.GEMINI_API_KEY;
 
-// ================================
-//  SAFE JSON PARSER (works 100%)
-// ================================
-function safeJSONParse(text) {
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    console.log("❌ JSON parse failed. Raw output:");
-    console.log(text.substring(0, 300));
-    throw new Error("Gemini returned invalid JSON");
-  }
-}
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
+});
 
-// ==========================================
-//  MAIN FUNCTION - EXTRACT DATA FROM PDF TEXT
-// ==========================================
-export const extractDataFromPDFText = async (pdfText) => {
-  console.log("📡 Fetching available v1 models...");
+// =================================
+// REGEX PARSER (PRIMARY ENGINE)
+// =================================
+function parseKTUResult(text) {
+  const lines = text.split("\n");
 
-  // Fetch ALL models
-  const modelList = await fetch(
-    `https://generativelanguage.googleapis.com/v1/models?key=${API_KEY}`
-  );
-  const modelJson = await modelList.json();
+  const students = [];
+  let currentStudent = null;
 
-  if (!modelJson.models) {
-    throw new Error("Unable to fetch model list");
-  }
+  const regRegex = /[A-Z]{3}\d{2}[A-Z]{2}\d{3}/;
+  const subjectRegex = /([A-Z]{3}\d{3})\s*\(?([A-Z+]+|Absent|F|FE|P)\)?/g;
 
-  // Choose fast, cheap model
-  const model =
-    modelJson.models.find((m) => m.name.includes("gemini-2.5-flash"))?.name ||
-    modelJson.models.find((m) => m.name.includes("flash"))?.name;
+  for (let line of lines) {
+    line = line.trim();
+    if (!line) continue;
 
-  if (!model) {
-    throw new Error("No compatible Gemini v1 model found");
-  }
+    const regMatch = line.match(regRegex);
 
-  console.log("➡ Using model:", model);
+    if (regMatch) {
+      if (currentStudent) students.push(currentStudent);
 
-  // REST endpoint
-  const url = `https://generativelanguage.googleapis.com/v1/${model}:generateContent?key=${API_KEY}`;
+      currentStudent = {
+        registerNumber: regMatch[0],
+        subjects: [],
+      };
 
-  // JSON output forced with delimiter trick
-  const prompt = `
-You must extract KTU exam result data and return STRICT JSON ONLY.
-
-JSON MUST BE WRAPPED INSIDE <json> ... </json> TAGS.
-
-NO markdown.
-NO commentary.
-NO extra text.
-
-FOLLOW THIS EXACT JSON STRUCTURE:
-
-{
-  "examInfo": {
-    "examName": "string",
-    "semester": number,
-    "examDate": "string"
-  },
-  "departments": [
-    {
-      "name": "string",
-      "courses": [
-        { "code": "string", "name": "string" }
-      ],
-      "students": [
-        {
-          "registerNumber": "string",
-          "subjects": [
-            { "code": "string", "grade": "string" }
-          ]
-        }
-      ]
+      line = line.replace(regMatch[0], "").trim();
     }
-  ]
+
+    let match;
+    while ((match = subjectRegex.exec(line)) !== null) {
+      if (currentStudent) {
+        currentStudent.subjects.push({
+          code: match[1],
+          grade: match[2],
+        });
+      }
+    }
+  }
+
+  if (currentStudent) students.push(currentStudent);
+
+  return students;
 }
 
-Now extract JSON from this PDF text:
+// =================================
+// OPTIONAL: GROQ CLEANUP (LIGHT)
+// =================================
+async function enhanceWithGroq(students) {
+  try {
+    const sample = students.slice(0, 10); // small batch
 
-${pdfText}
+    const prompt = `
+Clean and normalize this JSON.
 
-RETURN ONLY:
+Rules:
+- Keep structure SAME
+- Fix wrong grades if any
+- Return JSON only
 
-<json>
-{ ... }
-</json>
+${JSON.stringify(sample)}
 `;
 
-  const body = {
-    contents: [
+    const res = await groq.chat.completions.create({
+      model: "llama-3.1-8b-instant",
+      messages: [
+        { role: "system", content: "Return only JSON." },
+        { role: "user", content: prompt },
+      ],
+      max_tokens: 800,
+    });
+
+    let text = res.choices[0]?.message?.content || "";
+    text = text.replace(/```json|```/g, "").trim();
+
+    const fixed = JSON.parse(text);
+
+    // merge back cleaned data
+    return students.map((s, i) => fixed[i] || s);
+  } catch {
+    return students; // fallback
+  }
+}
+
+// =================================
+// MAIN FUNCTION (FINAL)
+// =================================
+export const extractDataFromPDFText = async (pdfText) => {
+  console.log("📡 HYBRID extraction started...");
+
+  // ✅ STEP 1: Extract ALL students using regex
+  const students = parseKTUResult(pdfText);
+
+  console.log("🎯 Total students extracted (regex):", students.length);
+
+  // ✅ STEP 2: Optional cleanup using Groq
+  const enhancedStudents = await enhanceWithGroq(students);
+
+  // =================================
+  // FINAL OUTPUT (TABLE COMPATIBLE)
+  // =================================
+  return {
+    examInfo: {},
+    departments: [
       {
-        parts: [{ text: prompt }],
+        name: "Combined",
+        students: enhancedStudents,
       },
     ],
   };
-
-  console.log("📤 Sending request to Google AI...");
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-  const data = await res.json();
-
-  if (data.error) {
-    throw new Error(data.error.message);
-  }
-
-  const text =
-    data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-
-  console.log("📥 Raw text received, length:", text.length);
-
-  // Extract JSON inside <json>...</json>
-  const match = text.match(/<json>([\s\S]*?)<\/json>/);
-
-  if (!match) {
-    throw new Error("Gemini did not return JSON inside <json> tags");
-  }
-
-  const jsonString = match[1].trim();
-
-  console.log("🔍 Extracted JSON size:", jsonString.length);
-
-  // Safe parse
-  return safeJSONParse(jsonString);
 };
